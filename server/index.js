@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 12312;
@@ -8,12 +9,17 @@ const PORT = process.env.PORT || 12312;
 app.use(cors());
 app.use(express.json());
 
-app.get('/', (req, res) => {
-    res.send('Roku Proxy Server Running');
-});
+// Serve static files from the React app build directory
+app.use(express.static(path.join(__dirname, '..', 'dist')));
 
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+// Server status endpoint
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: 'running',
+        message: 'Roku Proxy Server Running',
+        timestamp: new Date().toISOString(),
+        port: PORT
+    });
 });
 
 // Proxy route
@@ -60,6 +66,11 @@ app.all('/api/:ip/*', async (req, res) => {
         console.error('Proxy error:', error);
         res.status(500).json({ error: 'Proxy request failed', details: error.message });
     }
+});
+
+// Catch all handler: send back React's index.html file for client-side routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
