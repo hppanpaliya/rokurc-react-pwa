@@ -1,6 +1,6 @@
 FROM node:20-alpine 
 WORKDIR /app/dist
-COPY dist/* ./
+COPY dist/ ./
 
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
