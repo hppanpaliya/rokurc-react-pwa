@@ -13,6 +13,50 @@ A modern web-based remote control for Roku TVs built with React, Vite, and Tailw
 - **URL Integration**: Page URL automatically updates with IP and shortcuts
 - **CORS Bypass**: Backend proxy server eliminates CORS issues for status updates and app discovery
 
+
+## Docker
+
+You can run the Roku Remote Control app using Docker for easy deployment.
+
+### Using Docker Compose
+
+Create a `docker-compose.yml` file with the following content:
+
+```yaml
+services:
+   rokurc-react:
+      image: hppanpaliya/rokurc-react:latest
+      container_name: rokurc-react
+      ports:
+         - "12312:12312"
+      environment:
+         PORT: 12312
+         VITE_BACKEND_URL: "http://192.168.0.137:12312/api"
+      restart: unless-stopped
+```
+
+Start the service:
+
+```bash
+docker compose up -d
+```
+
+### Using Docker CLI
+
+You can also run the container directly:
+
+```bash
+docker run \
+   -d \
+   -p 12312:12312 \
+   -e PORT=12312 \
+   -e VITE_BACKEND_URL="http://192.168.0.137:12312/api" \
+   --name rokurc-react \
+   hppanpaliya/rokurc-react:latest
+```
+
+---
+
 ## Quick Start
 
 ### Prerequisites
