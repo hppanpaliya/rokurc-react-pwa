@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Info, Tv, Wifi, WifiOff } from 'lucide-react';
+import { env } from './env'
 
 const APP_COLORS = {
   "837": "rgb(252, 5, 5)",      // YouTube
@@ -97,7 +98,7 @@ const RokuRemote = () => {
 
   // Check if backend proxy is available
   const checkBackendAvailability = useCallback(async () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    const backendUrl = env.VITE_BACKEND_URL;
     if (!backendUrl) {
       setBackendAvailable(false);
       return false;
@@ -118,7 +119,7 @@ const RokuRemote = () => {
   }, []);
 
   const getUrl = useCallback((path, forceDirect = false) => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    const backendUrl = env.VITE_BACKEND_URL;
     if (backendUrl && backendAvailable && !forceDirect) {
        const cleanPath = path.startsWith('/') ? path.slice(1) : path;
        return `${backendUrl}/${ip}/${cleanPath}`;
