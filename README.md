@@ -31,7 +31,7 @@ services:
          - "12312:12312"
       environment:
          PORT: 12312
-         VITE_BACKEND_URL: "http://192.168.0.137:12312/api"
+         # VITE_BACKEND_URL: "http://192.168.0.137:12312/api"
       restart: unless-stopped
 ```
 
@@ -50,7 +50,7 @@ docker run \
    -d \
    -p 12312:12312 \
    -e PORT=12312 \
-   -e VITE_BACKEND_URL="http://192.168.0.137:12312/api" \
+   # -e VITE_BACKEND_URL="http://192.168.0.137:12312/api" \
    --name rokurc-react \
    hppanpaliya/rokurc-react:latest
 ```

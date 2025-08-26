@@ -98,7 +98,7 @@ const RokuRemote = () => {
 
   // Check if backend proxy is available
   const checkBackendAvailability = useCallback(async () => {
-    const backendUrl = env.VITE_BACKEND_URL;
+    const backendUrl = env.VITE_BACKEND_URL || '/api';
     if (!backendUrl) {
       setBackendAvailable(false);
       return false;
@@ -119,7 +119,7 @@ const RokuRemote = () => {
   }, []);
 
   const getUrl = useCallback((path, forceDirect = false) => {
-    const backendUrl = env.VITE_BACKEND_URL;
+    const backendUrl = env.VITE_BACKEND_URL || '/api';
     if (backendUrl && backendAvailable && !forceDirect) {
        const cleanPath = path.startsWith('/') ? path.slice(1) : path;
        return `${backendUrl}/${ip}/${cleanPath}`;
