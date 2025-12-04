@@ -18,5 +18,5 @@ RUN yarn global add pm2
 # Expose port
 EXPOSE 12312
 
-# Start 
-CMD ["./docker_start.sh"]   
+# Start command shell
+CMD ["sh", "./docker_start.sh"]
