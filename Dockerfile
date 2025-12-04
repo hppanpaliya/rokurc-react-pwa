@@ -5,7 +5,8 @@ COPY dist/* ./
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 COPY server/index.js ./
-COPY node_modules ./node_modules
+WORKDIR /app/server/node_modules
+COPY node_modules ./
 
 # Install pm2 globally
 RUN yarn global add pm2
