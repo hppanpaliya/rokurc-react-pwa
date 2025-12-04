@@ -8,6 +8,9 @@ COPY server/index.js ./
 WORKDIR /app/server/node_modules
 COPY server/node_modules ./
 
+WORKDIR /app
+COPY docker_start.sh ./
+
 # Install pm2 globally
 RUN yarn global add pm2
 
