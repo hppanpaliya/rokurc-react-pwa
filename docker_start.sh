@@ -10,7 +10,7 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
     echo "VITE_BACKEND_URL=$VITE_BACKEND_URL" > /app/dist/.env
     echo "PORT=$PORT" >> /app/server/.env
 
-    pm2-runtime stop yarn -- start
+    pm2-runtime stop index.js || true
 
     # Set environment variables in react
     cd /app/dist
@@ -24,4 +24,4 @@ fi
 
 # Start the application
 cd /app/server
-PM2_HOME=/app/server pm2-runtime start yarn -- dev
+PM2_HOME=/app/server pm2-runtime start index.js
