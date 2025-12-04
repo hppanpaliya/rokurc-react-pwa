@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Settings, Info, Tv, Wifi, WifiOff } from 'lucide-react';
-import { env } from './env'
+import { env } from '../env'
 
 const APP_COLORS = {
   "837": "rgb(252, 5, 5)",      // YouTube
