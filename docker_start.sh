@@ -10,13 +10,12 @@ if [ ! -f "$FIRST_RUN_FLAG" ]; then
     echo "VITE_BACKEND_URL=$VITE_BACKEND_URL" > /app/dist/.env
     echo "PORT=$PORT" >> /app/server/.env
 
-    pm2-runtime stop index.js || true
+    # No need to stop pm2-runtime or yarn here
 
     # Set environment variables in react
     cd /app/dist
     
-    npx react-inject-env set -d ./
-    
+    npx vite-inject-env set -d ./app/dist
 
     # Create the flag file to indicate completion of first run
     touch "$FIRST_RUN_FLAG"
