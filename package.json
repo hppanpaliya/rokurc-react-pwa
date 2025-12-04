@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "server": "cd server && npm start",
-    "build": "vite build && react-inject-env set -d dist",
+    "build": "vite build",
+    "build:setup": "vite build && react-inject-env set -d dist",
     "lint": "eslint .",
     "preview": "vite preview"
   },
