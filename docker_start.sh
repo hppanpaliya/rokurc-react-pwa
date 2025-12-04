@@ -7,8 +7,7 @@ FIRST_RUN_FLAG="/.first-run-complete"
 # Check if it's the first run
 if [ ! -f "$FIRST_RUN_FLAG" ]; then
     # Create .env file with runtime environment variables
-    echo "REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL" > /app/dist/.env
-    echo "REACT_APP_DEFAULT_PORT=$REACT_APP_DEFAULT_PORT" >> /app/dist/.env
+    echo "VITE_BACKEND_URL=$VITE_BACKEND_URL" > /app/dist/.env
     echo "PORT=$PORT" >> /app/server/.env
 
     pm2-runtime stop yarn -- start
