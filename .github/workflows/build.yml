@@ -26,20 +26,20 @@ jobs:
           node-version: '20'
 
       - name: Install React dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: ./react
+        run: npm ci
+        working-directory: ./
 
       - name: Build React app
-        run: yarn build
-        working-directory: ./react
+        run: npm run build
+        working-directory: ./
 
       - name: Delete node_modules from React app
         run: rm -rf ./node_modules
-        working-directory: ./react
+        working-directory: ./
         
-      - name: Install Mailserver dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: ./mailserver
+      - name: Install Server dependencies
+        run: npm ci
+        working-directory: ./server
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
