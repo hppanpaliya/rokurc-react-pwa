@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Settings, Info, Tv, Wifi, WifiOff } from 'lucide-react';
+import { Settings, Info, Tv, Power, Zap, Radio, BarChart3, Smartphone } from 'lucide-react';
 import { env } from '../env'
 
 const APP_COLORS = {
@@ -47,10 +47,9 @@ const RemoteBtn = ({ action, children, className = "", double = false, center = 
     ${isActive ? 'bg-purple-900 ring-2 ring-purple-300' : 'bg-roku-purple hover:bg-roku-dark'}
   `;
   
-  // Layout sizing logic matching original CSS percentages approx
   let sizeClasses = "w-[31%] py-3";
   if (double) sizeClasses = "w-[48%] py-3";
-  if (center) sizeClasses = "w-[31%] mx-auto py-3"; // Center alignment helper
+  if (center) sizeClasses = "w-[31%] mx-auto py-3";
 
   return (
     <button 
@@ -64,7 +63,6 @@ const RemoteBtn = ({ action, children, className = "", double = false, center = 
 };
 
 const RokuRemote = () => {
-  // Initialize IP from URL params or localStorage
   const getInitialIp = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const urlIp = urlParams.get('MyRokuTVIP');
@@ -76,6 +74,7 @@ const RokuRemote = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState(null);
   const [mediaState, setMediaState] = useState(null);
+  const [activeApp, setActiveApp] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState(() => getInitialIp() ? 'connected' : 'disconnected');
   const [activeKey, setActiveKey] = useState(null);
   const [apps, setApps] = useState([]);
@@ -96,7 +95,6 @@ const RokuRemote = () => {
   const [manualAppId, setManualAppId] = useState('');
   const pollingRef = useRef(null);
 
-  // Check if backend proxy is available
   const checkBackendAvailability = useCallback(async () => {
     const backendUrl = env.VITE_BACKEND_URL || '/api';
     if (!backendUrl) {
@@ -127,7 +125,6 @@ const RokuRemote = () => {
     return `http://${ip}:8060/${path}`;
   }, [ip, backendAvailable]);
 
-  // Update URL with current state
   const updateUrl = useCallback((newIp = ip, newShortcuts = shortcuts) => {
     const url = new URL(window.location);
     if (newIp) {
@@ -136,7 +133,6 @@ const RokuRemote = () => {
       url.searchParams.delete('MyRokuTVIP');
     }
     
-    // Add all shortcuts to URL as comma-separated IDs
     if (newShortcuts.length > 0) {
       const shortcutIds = newShortcuts.map(s => s.id).join(',');
       url.searchParams.set('shortcuts', shortcutIds);
@@ -149,7 +145,6 @@ const RokuRemote = () => {
 
   // --- Initialization ---
   useEffect(() => {
-    // Check local storage or URL params for IP
     const urlParams = new URLSearchParams(window.location.search);
     const urlIp = urlParams.get('MyRokuTVIP');
     const storedIp = localStorage.getItem('roku_tv_ip');
@@ -162,14 +157,9 @@ const RokuRemote = () => {
       setIsSettingsOpen(true);
     }
 
-    // Check backend availability
     checkBackendAvailability();
-
-    // Update URL to reflect current state
-    updateUrl(urlIp || storedIp, shortcuts);
   }, []);
 
-  // Load shortcuts from URL when apps are available
   useEffect(() => {
     if (apps.length === 0) return;
 
@@ -181,7 +171,6 @@ const RokuRemote = () => {
       const urlShortcutApps = apps.filter(app => shortcutIds.includes(app.id));
       
       if (urlShortcutApps.length > 0) {
-        // Merge with existing shortcuts, avoiding duplicates
         const existingIds = new Set(shortcuts.map(s => s.id));
         const newShortcuts = urlShortcutApps.filter(app => !existingIds.has(app.id));
         
@@ -200,13 +189,8 @@ const RokuRemote = () => {
     localStorage.setItem('roku_tv_ip', newIp);
     setIsSettingsOpen(false);
     
-    // Check backend availability
     await checkBackendAvailability();
-    
-    // Assume connected since we can't check due to CORS
     setConnectionStatus('connected');
-    
-    // Update URL with new IP
     updateUrl(newIp, shortcuts);
   };
 
@@ -224,17 +208,29 @@ const RokuRemote = () => {
       const xml = parseXml(text);
       
       const powerMode = xml.querySelector('power-mode')?.textContent;
-      setDeviceInfo({ powerMode });
+      const modelName = xml.querySelector('model-name')?.textContent;
+      const friendlyName = xml.querySelector('friendly-device-name')?.textContent;
+      const screenSize = xml.querySelector('screen-size')?.textContent;
+      const uiResolution = xml.querySelector('ui-resolution')?.textContent;
+      const softwareVersion = xml.querySelector('software-version')?.textContent;
+      
+      setDeviceInfo({ 
+        powerMode, 
+        modelName, 
+        friendlyName, 
+        screenSize,
+        uiResolution,
+        softwareVersion
+      });
       setConnectionStatus('connected');
     } catch {
-      // CORS error expected for local network requests, but connection might still work
       console.log('Could not fetch device info due to CORS restrictions');
       setConnectionStatus('error');
     }
-  }, [ip]);
+  }, [ip, getUrl]);
 
   const fetchMediaPlayer = useCallback(async () => {
-    if (!ip) return;
+    if (!ip || !backendAvailable) return;
     try {
       const response = await fetch(getUrl('query/media-player'), { signal: AbortSignal.timeout(2000) });
       const text = await response.text();
@@ -255,18 +251,37 @@ const RokuRemote = () => {
         state,
         appId,
         appName,
-        position, // ms
-        duration, // ms
+        position,
+        duration,
         progress: duration > 0 ? (position / duration) * 100 : 0
       });
     } catch {
-      // CORS error expected for local network requests, media info may not be available
-      // This is normal and doesn't affect remote functionality
+      // Expected on direct connections
     }
-  }, [ip]);
+  }, [ip, backendAvailable, getUrl]);
+
+  const fetchActiveApp = useCallback(async () => {
+    if (!ip || !backendAvailable) return;
+    try {
+      const response = await fetch(getUrl('query/active-app'), { signal: AbortSignal.timeout(2000) });
+      const text = await response.text();
+      const xml = parseXml(text);
+      const appEl = xml.querySelector('app');
+      
+      if (appEl) {
+        setActiveApp({
+          id: appEl.getAttribute('id'),
+          name: appEl.textContent,
+          type: appEl.getAttribute('type') || 'app'
+        });
+      }
+    } catch {
+      console.log('Could not fetch active app');
+    }
+  }, [ip, backendAvailable, getUrl]);
 
   const fetchApps = useCallback(async () => {
-    if (!ip) return;
+    if (!ip || !backendAvailable) return;
     try {
       const response = await fetch(getUrl('query/apps'), { signal: AbortSignal.timeout(5000) });
       const text = await response.text();
@@ -281,20 +296,22 @@ const RokuRemote = () => {
 
       setApps(appsList);
     } catch {
-      // CORS restrictions prevent direct API calls from browser
-      console.log('Could not fetch apps list due to CORS restrictions');
+      console.log('Could not fetch apps list');
     }
-  }, [ip]);  const launchApp = useCallback(async (appId) => {
+  }, [ip, backendAvailable, getUrl]);
+
+  const launchApp = useCallback(async (appId) => {
     if (!ip) return;
     try {
-      // Always use direct connection for POST requests (app launch) as they work without CORS
       await fetch(`http://${ip}:8060/launch/${appId}`, { method: 'POST', mode: 'no-cors' });
-      // Update media state after launching app
-      setTimeout(fetchMediaPlayer, 1000);
+      setTimeout(() => {
+        fetchMediaPlayer();
+        fetchActiveApp();
+      }, 1000);
     } catch (err) {
       console.error("App launch failed", err);
     }
-  }, [ip, fetchMediaPlayer]);
+  }, [ip, fetchMediaPlayer, fetchActiveApp]);
 
   const addShortcut = (app) => {
     if (shortcuts.length >= 6) {
@@ -304,8 +321,7 @@ const RokuRemote = () => {
     const newShortcut = {
       id: app.id,
       name: app.name,
-      type: 'app',
-      created: Date.now()
+      type: 'app'
     };
     const updatedShortcuts = [...shortcuts, newShortcut];
     setShortcuts(updatedShortcuts);
@@ -323,15 +339,13 @@ const RokuRemote = () => {
     const newShortcut = {
       id: manualAppId.trim(),
       name: manualAppName.trim(),
-      type: 'app',
-      created: Date.now()
+      type: 'app'
     };
     const updatedShortcuts = [...shortcuts, newShortcut];
     setShortcuts(updatedShortcuts);
     localStorage.setItem('roku_shortcuts', JSON.stringify(updatedShortcuts));
     updateUrl(ip, updatedShortcuts);
 
-    // Reset form
     setManualAppName('');
     setManualAppId('');
     setShowManualAdd(false);
@@ -347,12 +361,10 @@ const RokuRemote = () => {
   const sendCommand = useCallback(async (key, value = null) => {
     if (!ip) return;
 
-    // Visual feedback
     setActiveKey(key);
     setTimeout(() => setActiveKey(null), 200);
 
     const endpoint = value ? `${key}/${encodeURIComponent(value)}` : `keypress/${key}`;
-    // Always use direct connection for POST requests (controls) as they work without CORS
     const url = `http://${ip}:8060/${endpoint}`;
 
     try {
@@ -367,22 +379,23 @@ const RokuRemote = () => {
     if (!ip) return;
 
     const poll = async () => {
-      await checkBackendAvailability(); // Check backend status periodically
+      await checkBackendAvailability();
       fetchDeviceInfo();
-      fetchMediaPlayer();
+      if (backendAvailable) {
+        fetchMediaPlayer();
+        fetchActiveApp();
+      }
     };
 
-    poll(); // Initial call
-    pollingRef.current = setInterval(poll, 10000); // Check every 10 seconds
+    poll();
+    pollingRef.current = setInterval(poll, 10000);
 
     return () => clearInterval(pollingRef.current);
-  }, [ip, fetchDeviceInfo, fetchMediaPlayer, checkBackendAvailability]);
-  
+  }, [ip, fetchDeviceInfo, fetchMediaPlayer, fetchActiveApp, checkBackendAvailability, backendAvailable]);
 
   // --- Keyboard Listeners ---
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore if typing in an input
       if (e.target.tagName === 'INPUT') return;
 
       if (KEY_MAP[e.code]) {
@@ -404,64 +417,125 @@ const RokuRemote = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  // --- Render Components ---
-
   const getAccentColor = () => {
-    if (mediaState?.appId && APP_COLORS[mediaState.appId]) {
-      return APP_COLORS[mediaState.appId];
+    if (activeApp?.id && APP_COLORS[activeApp.id]) {
+      return APP_COLORS[activeApp.id];
     }
-    return '#662D91'; // Default Roku Purple
+    return '#662D91';
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-2 sm:p-4 font-sans overflow-y-auto">
-      <div className="w-full max-w-[480px] bg-white rounded-3xl shadow-xl border border-gray-300 p-4 sm:p-6 relative">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-2 sm:p-4 font-sans overflow-y-auto">
+      <div className="w-full max-w-[480px] bg-gray-800 rounded-3xl shadow-2xl border border-gray-700 p-4 sm:p-6 relative">
         
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-roku-purple">Roku RC</h1>
-            <div className="flex gap-1">
+        {/* Header with Status */}
+        <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-700">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold text-white">Roku RC</h1>
+            <p className="text-xs text-gray-400">{ip || 'Not Connected'}</p>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex flex-col items-center gap-1">
               {connectionStatus === 'connected' && <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="TV Connected"></span>}
-              {connectionStatus === 'error' && <span className="w-2 h-2 bg-red-500 rounded-full" title="TV Connection Error"></span>}
+              {connectionStatus === 'error' && <span className="w-2 h-2 bg-red-500 rounded-full" title="TV Error"></span>}
+              {!ip && <span className="w-2 h-2 bg-gray-500 rounded-full" title="Not Configured"></span>}
+              <span className="text-xs text-gray-500">TV</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
               {backendAvailable ? (
-                <span className="w-2 h-2 bg-blue-500 rounded-full" title="Backend Server Online - Full Features Available"></span>
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" title="Backend Online"></span>
               ) : (
-                <span className="w-2 h-2 bg-yellow-500 rounded-full" title="Backend Server Offline - Limited Features"></span>
+                <span className="w-2 h-2 bg-yellow-500 rounded-full" title="Backend Offline"></span>
               )}
+              <span className="text-xs text-gray-500">API</span>
             </div>
           </div>
-          <div className="flex gap-3">
-             <button onClick={() => setIsShortcutsOpen(!isShortcutsOpen)} className="text-gray-400 hover:text-roku-purple" title="Manage Shortcuts"><Tv size={24} /></button>
-             <a href="#" className="text-gray-400 hover:text-roku-purple"><Info size={24} /></a>
-             <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="text-gray-400 hover:text-roku-purple"><Settings size={24} /></button>
+          <div className="flex gap-2">
+            <button onClick={() => setIsShortcutsOpen(!isShortcutsOpen)} className="text-gray-400 hover:text-white transition"><Tv size={24} /></button>
+            <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className="text-gray-400 hover:text-white transition"><Settings size={24} /></button>
           </div>
         </div>
 
-        {/* Configuration Panel (Toggleable) */}
+        {/* Device Info Panel */}
+        {deviceInfo && backendAvailable && (
+          <div className="mb-6 p-4 bg-gray-700 rounded-2xl border border-gray-600">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-gray-400 text-xs">Device</p>
+                <p className="text-white font-medium text-sm truncate">{deviceInfo.friendlyName || 'Roku TV'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">Model</p>
+                <p className="text-white font-medium text-sm">{deviceInfo.modelName || '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">Resolution</p>
+                <p className="text-white font-medium text-sm">{deviceInfo.uiResolution || '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">Power</p>
+                <p className="text-white font-medium text-sm flex items-center gap-1">
+                  <Power size={14} className={deviceInfo.powerMode === 'Ready' ? 'text-red-400' : 'text-green-400'} />
+                  {deviceInfo.powerMode === 'Ready' ? 'Stand By - OFF' : deviceInfo.powerMode || '-'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active App Display */}
+        {activeApp && backendAvailable && (
+          <div className="mb-6 p-4 rounded-2xl border border-gray-600" style={{ backgroundColor: `${getAccentColor()}20` }}>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: getAccentColor() }}>
+                <Radio size={24} className="text-white" />
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs">Currently Playing</p>
+                <p className="text-white font-semibold">{activeApp.name}</p>
+              </div>
+            </div>
+            {mediaState && mediaState.duration > 0 && (
+              <div className="mt-3">
+                <div className="w-full bg-gray-600 rounded-full h-2">
+                  <div 
+                    className="h-2 rounded-full transition-all duration-300" 
+                    style={{ width: `${mediaState.progress}%`, backgroundColor: getAccentColor() }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400 mt-2">
+                  <span>{msToTime(mediaState.position)}</span>
+                  <span>{msToTime(mediaState.duration)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Configuration Panel */}
         {isSettingsOpen && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200 animate-in fade-in slide-in-from-top-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Roku TV IP Address</label>
-            <div className="flex gap-2">
+          <div className="mb-6 p-4 bg-gray-700 rounded-2xl border border-gray-600 animate-in fade-in slide-in-from-top-2">
+            <label className="block text-sm font-medium text-white mb-2">Roku TV IP Address</label>
+            <div className="flex gap-2 mb-2">
               <input 
                 type="text" 
                 value={ip} 
                 onChange={(e) => setIp(e.target.value)}
                 placeholder="e.g. 192.168.1.50"
-                className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-roku-purple focus:outline-none"
+                className="flex-1 p-2 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none bg-gray-800 text-white"
               />
               <button 
                 onClick={() => saveIp(ip)}
-                className="bg-roku-purple text-white px-4 py-2 rounded-lg hover:bg-roku-dark"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
               >
                 Save
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-2">Find this in your Roku: Settings &gt; Network &gt; About</p>
+            <p className="text-xs text-gray-400">Settings &gt; Network &gt; About on your Roku</p>
           </div>
         )}
 
-        {/* Shortcuts Bar (Always Visible) */}
+        {/* Shortcuts Bar */}
         {shortcuts.length > 0 && (
           <div className="mb-6">
             <div className="grid grid-cols-3 gap-2">
@@ -469,7 +543,8 @@ const RokuRemote = () => {
                 <button
                   key={shortcut.id}
                   onClick={() => launchApp(shortcut.id)}
-                  className="flex items-center justify-center p-2 h-12 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 text-center leading-tight wrap-break-word overflow-hidden transition-colors"
+                  className="flex items-center justify-center p-3 h-14 bg-gray-700 hover:bg-gray-600 rounded-xl border border-gray-600 text-xs font-medium text-white text-center leading-tight transition-colors"
+                  style={{ borderLeftColor: APP_COLORS[shortcut.id] || '#662D91', borderLeftWidth: '3px' }}
                 >
                   <span className="line-clamp-2">{shortcut.name}</span>
                 </button>
@@ -480,122 +555,106 @@ const RokuRemote = () => {
 
         {/* Shortcuts Management Panel */}
         {isShortcutsOpen && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200 animate-in fade-in slide-in-from-top-2">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Manage Shortcuts</h3>
+          <div className="mb-6 p-4 bg-gray-700 rounded-2xl border border-gray-600 animate-in fade-in slide-in-from-top-2">
+            <h3 className="text-lg font-semibold text-white mb-4">Manage Shortcuts</h3>
 
-            {/* Current Shortcuts List for Removal */}
-            {shortcuts.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Your Shortcuts (Max 6)</h4>
-                <div className="space-y-2">
-                  {shortcuts.map((shortcut) => (
-                    <div key={shortcut.id} className="flex items-center justify-between p-2 bg-white rounded-lg border">
-                      <span className="text-sm text-gray-800">{shortcut.name}</span>
-                      <button
-                        onClick={() => removeShortcut(shortcut.id)}
-                        className="text-red-500 hover:text-red-700 px-2"
-                        title="Remove shortcut"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Available Apps */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Available Apps</h4>
-              {apps.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                  {apps.map((app) => {
-                    const isShortcut = shortcuts.some(s => s.id === app.id);
-                    return (
-                      <div key={app.id} className="flex items-center justify-between p-2 bg-white rounded-lg border">
-                        <span className="text-sm text-gray-800 truncate">{app.name}</span>
-                        {!isShortcut && shortcuts.length < 6 && (
+            {backendAvailable ? (
+              <>
+                {shortcuts.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-300 mb-2">Your Shortcuts (Max 6)</h4>
+                    <div className="space-y-2">
+                      {shortcuts.map((shortcut) => (
+                        <div key={shortcut.id} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                          <span className="text-sm text-gray-200">{shortcut.name}</span>
                           <button
-                            onClick={() => addShortcut(app)}
-                            className="ml-2 text-roku-purple hover:text-roku-dark text-sm font-medium"
-                            title="Add shortcut"
+                            onClick={() => removeShortcut(shortcut.id)}
+                            className="text-red-400 hover:text-red-300 text-sm"
                           >
-                            +
+                            Remove
                           </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No apps found. Make sure your TV is connected and try refreshing.</p>
-              )}
-              <button
-                onClick={fetchApps}
-                className="mt-3 text-sm text-roku-purple hover:text-roku-dark"
-              >
-                Refresh Apps List
-              </button>
-
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => setShowManualAdd(!showManualAdd)}
-                  className="text-sm text-roku-purple hover:text-roku-dark font-medium"
-                >
-                  {showManualAdd ? 'Cancel' : 'Add Manual Shortcut'}
-                </button>
-
-                {showManualAdd && (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">App Name</label>
-                      <input
-                        type="text"
-                        value={manualAppName}
-                        onChange={(e) => setManualAppName(e.target.value)}
-                        placeholder="e.g., Netflix"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-roku-purple"
-                      />
+                        </div>
+                      ))}
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">App ID</label>
-                      <input
-                        type="text"
-                        value={manualAppId}
-                        onChange={(e) => setManualAppId(e.target.value)}
-                        placeholder="e.g., 12"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-roku-purple"
-                      />
-                    </div>
-                    <button
-                      onClick={addManualShortcut}
-                      disabled={!manualAppName.trim() || !manualAppId.trim() || shortcuts.length >= 6}
-                      className="w-full py-2 text-sm text-white bg-roku-purple hover:bg-roku-dark rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Add Shortcut
-                    </button>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Media Info / Progress Bar */}
-        {/* Disabled due to CORS - would show current app and playback progress */}
-        {false && mediaState && (mediaState.state === 'play' || mediaState.state === 'pause') && (
-          <div className={`transition-all duration-500 overflow-hidden max-h-32 opacity-100 mb-6`}>
-            <div className="flex justify-between text-roku-purple font-medium mb-1">
-              <span className="text-xs">{msToTime(mediaState?.position)}</span>
-              <span className="text-xs font-bold truncate max-w-[150px]">{mediaState?.appName}</span>
-              <span className="text-xs">{msToTime(mediaState?.duration)}</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="h-2.5 rounded-full transition-all duration-1000 ease-linear" 
-                style={{ width: `${mediaState?.progress || 0}%`, backgroundColor: getAccentColor() }}
-              ></div>
-            </div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Available Apps</h4>
+                  {apps.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto mb-3">
+                      {apps.map((app) => {
+                        const isShortcut = shortcuts.some(s => s.id === app.id);
+                        return (
+                          <div key={app.id} className="flex items-center justify-between p-2 bg-gray-800 rounded-lg">
+                            <span className="text-sm text-gray-200 truncate">{app.name}</span>
+                            {!isShortcut && shortcuts.length < 6 && (
+                              <button
+                                onClick={() => addShortcut(app)}
+                                className="ml-2 text-purple-400 hover:text-purple-300 text-sm font-medium"
+                              >
+                                +
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 mb-3">No apps found.</p>
+                  )}
+                  <button
+                    onClick={fetchApps}
+                    className="text-sm text-purple-400 hover:text-purple-300 font-medium"
+                  >
+                    Refresh Apps
+                  </button>
+
+                  <div className="mt-4 pt-4 border-t border-gray-600">
+                    <button
+                      onClick={() => setShowManualAdd(!showManualAdd)}
+                      className="text-sm text-purple-400 hover:text-purple-300 font-medium"
+                    >
+                      {showManualAdd ? 'Cancel' : 'Add Manual Shortcut'}
+                    </button>
+
+                    {showManualAdd && (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">App Name</label>
+                          <input
+                            type="text"
+                            value={manualAppName}
+                            onChange={(e) => setManualAppName(e.target.value)}
+                            placeholder="e.g., Netflix"
+                            className="w-full px-3 py-2 text-sm border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-800 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">App ID</label>
+                          <input
+                            type="text"
+                            value={manualAppId}
+                            onChange={(e) => setManualAppId(e.target.value)}
+                            placeholder="e.g., 12"
+                            className="w-full px-3 py-2 text-sm border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-800 text-white"
+                          />
+                        </div>
+                        <button
+                          onClick={addManualShortcut}
+                          disabled={!manualAppName.trim() || !manualAppId.trim() || shortcuts.length >= 6}
+                          className="w-full py-2 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          Add Shortcut
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-yellow-400">Backend offline - app management unavailable. Use manual shortcuts.</p>
+            )}
           </div>
         )}
 
@@ -604,7 +663,7 @@ const RokuRemote = () => {
           
           {/* Row 1: Power & Volume */}
           <div className="flex justify-between gap-2">
-            <RemoteBtn action="Power" className="bg-gray-500 hover:bg-gray-600" activeKey={activeKey} sendCommand={sendCommand}>
+            <RemoteBtn action="Power" className="bg-red-600 hover:bg-red-700" activeKey={activeKey} sendCommand={sendCommand}>
               <PowerIcon />
             </RemoteBtn>
             <RemoteBtn action="VolumeMute" activeKey={activeKey} sendCommand={sendCommand}><MuteIcon /></RemoteBtn>
@@ -653,30 +712,30 @@ const RokuRemote = () => {
             <input 
               type="text" 
               placeholder="Type to send text..."
-              className="w-full p-3 text-center border border-roku-purple rounded-xl focus:outline-none focus:ring-2 focus:ring-roku-purple text-lg text-gray-900 placeholder-gray-500 bg-white"
+              className="w-full p-3 text-center border border-purple-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg text-white placeholder-gray-500 bg-gray-700"
               onKeyDown={(e) => {
                 if (e.key === 'Backspace') {
                    sendCommand('Backspace');
                 } else if (e.key.length === 1) {
-                   // This is a naive implementation. Roku Lit_ endpoint handles literal chars.
                    sendCommand(`Lit_${encodeURIComponent(e.key)}`);
                 }
               }}
             />
           </div>
 
-          {/* Connection Prompt if disconnected */}
+          {/* Connection Prompt */}
           {!ip && (
-             <div className="text-center mt-4">
-                <img src="https://placehold.co/400x100?text=Connect+TV" alt="No TV" className="mx-auto opacity-50 mb-2 rounded-lg" />
-                <p className="text-gray-500 text-sm">Please configure your TV IP in settings.</p>
+             <div className="text-center mt-6 p-4 bg-gray-700 rounded-xl border border-gray-600">
+                <Smartphone size={32} className="mx-auto text-gray-500 mb-2" />
+                <p className="text-gray-300 text-sm font-medium">Configure Your Roku TV</p>
+                <p className="text-gray-400 text-xs mt-1">Click the settings icon above to get started</p>
              </div>
           )}
 
         </div>
       </div>
       
-      {/* Global Styles for Roku specific colors that Tailwind config might miss if not extended */}
+      {/* Global Styles */}
       <style>{`
         .bg-roku-purple { background-color: #662D91; }
         .hover\\:bg-roku-dark:hover { background-color: #49247A; }
@@ -687,7 +746,7 @@ const RokuRemote = () => {
   );
 };
 
-// --- SVG Icons Components ---
+// --- SVG Icons ---
 const PowerIcon = () => (
   <svg fill="currentColor" width="20" height="20" viewBox="-2 0 19 19"><path d="M7.498 17.1a7.128 7.128 0 0 1-.98-.068 7.455 7.455 0 0 1-1.795-.483 7.26 7.26 0 0 1-3.028-2.332A7.188 7.188 0 0 1 .73 12.52a7.304 7.304 0 0 1 .972-7.128 7.221 7.221 0 0 1 1.387-1.385 1.03 1.03 0 0 1 1.247 1.638 5.176 5.176 0 0 0-.993.989 5.313 5.313 0 0 0-.678 1.181 5.23 5.23 0 0 0-.348 1.292 5.22 5.22 0 0 0 .326 2.653 5.139 5.139 0 0 0 .69 1.212 5.205 5.205 0 0 0 .992.996 5.257 5.257 0 0 0 1.178.677 5.37 5.37 0 0 0 1.297.35 5.075 5.075 0 0 0 1.332.008 5.406 5.406 0 0 0 1.32-.343 5.289 5.289 0 0 0 2.211-1.682 5.18 5.18 0 0 0 1.02-2.465 5.2 5.2 0 0 0 .01-1.336 5.315 5.315 0 0 0-.343-1.318 5.195 5.195 0 0 0-.695-1.222 5.134 5.134 0 0 0-.987-.989 1.03 1.03 0 1 1 1.24-1.643 7.186 7.186 0 0 1 1.384 1.386 7.259 7.259 0 0 1 .97 1.706 7.413 7.413 0 0 1 .473 1.827 7.296 7.296 0 0 1-4.522 7.65 7.476 7.476 0 0 1-1.825.471 7.203 7.203 0 0 1-.89.056zM7.5 9.613a1.03 1.03 0 0 1-1.03-1.029V2.522a1.03 1.03 0 0 1 2.06 0v6.062a1.03 1.03 0 0 1-1.03 1.03z"/></svg>
 );
